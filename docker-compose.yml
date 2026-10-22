@@ -1,0 +1,23 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    image: sse-backend:local
+    environment:
+      SERVER_PORT: 8080
+    expose:
+      - "8080"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    image: sse-frontend:local
+    environment:
+      # Docker Compose DNS resolves the backend service name on this network.
+      BACKEND_ORIGIN: http://backend:8080
+    depends_on:
+      - backend
+    ports:
+      - "8088:80"
+    restart: unless-stopped

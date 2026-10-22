@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0a1020">
+  <title>实时事件流 · SSE Demo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="ambient ambient-one"></div>
+  <div class="ambient ambient-two"></div>
+  <main class="shell">
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="SSE 实时事件流首页">
+        <span class="brand-mark"><span></span><span></span><span></span></span>
+        <span>stream<span class="brand-dot">.</span></span>
+      </a>
+      <div class="topbar-note"><span class="pulse"></span> SERVER-SENT EVENTS <span class="version">/ DEMO</span></div>
+      <a class="github-link" href="https://developer.mozilla.org/zh-CN/docs/Web/API/Server-sent_events" target="_blank" rel="noreferrer">SSE 文档 <span>↗</span></a>
+    </header>
+
+    <section class="hero">
+      <div class="eyebrow"><span class="eyebrow-line"></span> REAL-TIME CONNECTION</div>
+      <h1>让数据，<span>持续抵达。</span></h1>
+      <p class="intro">基于 Server-Sent Events 的服务端推送演示。建立一次连接，后端事件就会沿着长连接实时送达浏览器。</p>
+    </section>
+
+    <section class="dashboard" aria-label="SSE 实时演示控制台">
+      <div class="panel stream-panel">
+        <div class="panel-heading">
+          <div>
+            <div class="panel-kicker">LIVE STREAM <span class="live-indicator" id="live-indicator"></span></div>
+            <h2>事件流控制台</h2>
+          </div>
+          <div class="connection-state" id="connection-state"><span class="state-dot"></span><span id="state-label">未连接</span></div>
+        </div>
+
+        <div class="connection-bar">
+          <div class="endpoint"><span class="method">GET</span><code>/api/events</code></div>
+          <button class="connect-button" id="connect-button" type="button"><span class="button-icon">▶</span> 建立连接</button>
+        </div>
+
+        <div class="stream-meta">
+          <div><span class="meta-label">连接状态</span><strong id="meta-status">等待连接</strong></div>
+          <div><span class="meta-label">已接收事件</span><strong id="event-count">0 <small>条</small></strong></div>
+          <div><span class="meta-label">最近活动</span><strong class="mono" id="last-event">—</strong></div>
+        </div>
+
+        <div class="event-header">
+          <div><span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span><span class="event-title">EVENT LOG</span></div>
+          <button class="clear-button" id="clear-button" type="button">清空记录 <span>⌫</span></button>
+        </div>
+        <div class="event-list" id="event-list" role="log" aria-live="polite" aria-relevant="additions">
+          <div class="empty-state" id="empty-state">
+            <div class="empty-icon">⌁</div>
+            <strong>事件将在这里出现</strong>
+            <span>点击“建立连接”开始接收服务端推送</span>
+          </div>
+        </div>
+        <div class="panel-footer"><span class="footer-spark">✳</span> 连接保持开启时，事件会自动持续推送 <span class="footer-right">SSE · HTTP/1.1</span></div>
+      </div>
+
+      <aside class="side-column">
+        <div class="panel info-panel">
+          <div class="panel-kicker">HOW IT WORKS</div>
+          <h3>一条单向通道<br>实时送达。</h3>
+          <p>浏览器通过原生 <code>EventSource</code> 建立 HTTP 长连接。服务端持续发送事件，无需轮询，也无需额外协议。</p>
+          <div class="flow">
+            <div class="flow-step"><span class="flow-icon browser-icon">◫</span><span><strong>浏览器</strong><small>EventSource</small></span></div>
+            <div class="flow-line"><span></span></div>
+            <div class="flow-step"><span class="flow-icon server-icon">⌘</span><span><strong>Java 服务</strong><small>Spring Boot · SSE</small></span></div>
+          </div>
+        </div>
+        <div class="tip-card"><span class="tip-icon">✦</span><div><strong>自动重连已就绪</strong><p>连接意外中断时，EventSource 会自动尝试重新连接。</p></div></div>
+        <div class="runtime-note"><span class="runtime-dot"></span> 服务端每 5 秒推送一条示例事件 <span class="runtime-heartbeat">· 每 15 秒发送心跳</span></div>
+      </aside>
+    </section>
+
+    <footer class="page-footer"><span>SPRING BOOT <i>×</i> EVENTSOURCE</span><span>由持续连接驱动 <span class="footer-heart">♥</span></span></footer>
+  </main>
+</body>
+</html>
