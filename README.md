@@ -44,16 +44,60 @@ docker compose down
 
 后端 API 也可在没有前端时直接运行：在 `backend/` 下执行 `mvn spring-boot:run`，默认监听 8080。
 
-## 构建镜像
+## 构建并推送镜像到阿里云 ACR
 
 两个服务分别构建，前端的后端地址通过 `BACKEND_ORIGIN` 注入。生产环境必须将该值设为 SAE 后端应用可达的**内网**地址（`http://` + 内网域名/IP + `:8080`），不要设置为浏览器可访问的 localhost，也不要让前端容器走公网调用后端。
 
-```bash
-docker build -t <ACR仓库>/sse-backend:<版本> ./backend
-docker build -t <ACR仓库>/sse-frontend:<版本> ./frontend
+### 1. 准备 ACR 仓库
+
+在阿里云控制台进入**容器镜像服务 ACR**，创建/选择地域实例，创建命名空间（namespace），并分别创建 `sse-backend` 和 `sse-frontend` 两个镜像仓库。记录该地域/实例的登录地址、命名空间和仓库名。ACR 控制台通常会在实例的访问凭证/访问控制页面显示登录地址；地址因地域、个人版/企业版实例和公网/专有网络访问方式而不同，以下地址仅是杭州地域的示例：
+
+```text
+registry.cn-hangzhou.aliyuncs.com/<命名空间>/sse-backend:<版本>
+registry.cn-hangzhou.aliyuncs.com/<命名空间>/sse-frontend:<版本>
 ```
 
-建议在与 SAE 运行环境兼容的 Linux/amd64 环境构建并推送到阿里云容器镜像服务 ACR。两个目录都包含各自的 `Dockerfile`。
+如果构建机在 VPC 内，优先选择构建机可达的专有网络/内网端点；否则使用已开启且可访问的公网端点。不要照抄示例地址，实际端点以 ACR 控制台展示的地址为准。
+
+### 2. 登录 ACR
+
+在本地安装并启动 Docker，然后执行登录。`--username` 使用 ACR 控制台要求的账号（可能是阿里云账号或 RAM 用户）；运行后在提示符中输入 ACR 访问凭证/访问密码。不要把密码写进脚本、Git 或聊天记录。
+
+```bash
+REGISTRY="registry.cn-hangzhou.aliyuncs.com"  # 替换成 ACR 控制台给出的登录地址
+NAMESPACE="your-namespace"                     # 替换成你创建的命名空间
+VERSION="1.0.0"
+ACR_USERNAME="your-acr-username"               # 替换成 ACR 要求的登录用户名
+
+docker login --username="$ACR_USERNAME" "$REGISTRY"
+```
+
+若仓库使用企业版实例提供的专属端点，`REGISTRY` 和登录用户名格式都按控制台指引填写。下面各代码块默认在同一个终端依次执行；如果重新打开终端，需要重新设置这些变量。
+
+### 3. 构建、打标签并推送
+
+SAE 运行镜像需与所选运行环境架构兼容。建议构建 `linux/amd64` 镜像；较新的 Docker 支持以下 `--platform` 参数：
+
+```bash
+docker build --platform linux/amd64 -t "$REGISTRY/$NAMESPACE/sse-backend:$VERSION" ./backend
+docker build --platform linux/amd64 -t "$REGISTRY/$NAMESPACE/sse-frontend:$VERSION" ./frontend
+
+docker push "$REGISTRY/$NAMESPACE/sse-backend:$VERSION"
+docker push "$REGISTRY/$NAMESPACE/sse-frontend:$VERSION"
+```
+
+如果本机 Docker 不支持跨架构 `--platform` 构建，可在 Linux/amd64 构建机执行，或使用 Docker Buildx：
+
+```bash
+docker buildx build --platform linux/amd64 -t "$REGISTRY/$NAMESPACE/sse-backend:$VERSION" --push ./backend
+docker buildx build --platform linux/amd64 -t "$REGISTRY/$NAMESPACE/sse-frontend:$VERSION" --push ./frontend
+```
+
+推送成功后，在 ACR 控制台相应仓库的**镜像版本**页面确认 `$VERSION` 已出现。每次发布建议使用新的版本标签（例如 `1.0.1` 或 Git 提交短 SHA），避免覆盖正在运行的标签。
+
+### 4. 在 SAE 中使用已推送的镜像
+
+创建/更新 SAE 应用时，镜像地址填写完整地址，例如 `registry.cn-hangzhou.aliyuncs.com/<命名空间>/sse-backend:1.0.0`。私有仓库需要确保 SAE 有拉取权限：按当前 SAE 控制台提供的 ACR 授权方式配置同账号授权、RAM 权限或镜像仓库凭证；不要假设仅在本地 `docker login` 后 SAE 就能访问。前端镜像同理。
 
 ## 阿里云 SAE + ALB 部署
 
