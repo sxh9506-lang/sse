@@ -105,7 +105,9 @@ docker buildx build --platform linux/amd64 -t "$REGISTRY/$NAMESPACE/sse-frontend
 2. **创建后端 SAE 应用**：使用 `sse-backend` 镜像，容器端口 `8080`，监听端口 `8080`，启动探针/健康检查路径设为 `/api/health`。配置合理的 CPU/内存，并按预期长连接数设置实例数和连接容量。记录 SAE 提供的后端应用内网服务发现地址或内网访问地址。
 3. **创建前端 SAE 应用**：使用 `sse-frontend` 镜像，容器端口 `80`。添加环境变量 `BACKEND_ORIGIN=http://<后端内网服务地址>:8080`（示例仅供说明，替换为 SAE 控制台提供且从前端 VPC 可达的地址）。前端探针可使用 `/`。确保前后端应用处于可互通的网络中。
 4. **配置 ALB**：创建或使用已有 ALB，在监听器中将业务端口（建议 HTTPS/443）转发至前端 SAE 应用的后端服务器组/内网入口，后端端口为 `80`。将指定域名（如 `sse.example.com`）解析到 ALB 地址，并在 ALB 监听器绑定域名对应的 TLS 证书；可另设 HTTP/80 重定向到 HTTPS/443。具体后端服务器组类型按当前地域和 SAE/ALB 控制台支持的 SAE 集成方式选择。
-5. **验证链路**：访问 `https://<指定域名>/` 确认页面加载；访问 `https://<指定域名>/api/health` 确认返回 `status: UP`；在页面点击连接，或运行 `curl -N https://<指定域名>/api/events` 确认数据持续输出。
+5. **验证链路**：访问 `https://<指定域名>/` 确认页面加载；访问 `https://<指定域名>/styles.css` 应返回 CSS 内容且状态码为 200；访问 `https://<指定域名>/api/health` 确认返回 `status: UP`；在页面点击连接，或运行 `curl -N https://<指定域名>/api/events` 确认数据持续输出。
+
+如果页面显示为无样式的纯文本，先在浏览器开发者工具的 Network 面板检查 `styles.css`：确认请求状态是 200、响应是 CSS，而不是 404 或返回了 `index.html`。从仓库根目录以 `./frontend` 为构建上下文重新构建并推送前端镜像，使用新的镜像标签更新 SAE 应用，并清理/刷新浏览器缓存。本项目前端样式使用系统字体，不依赖 Google Fonts 等外部字体站点。
 
 > **SSE/负载均衡注意事项**
 >
