@@ -114,6 +114,7 @@ docker buildx build --platform linux/amd64 -t "$REGISTRY/$NAMESPACE/sse-frontend
 > - 前端 Nginx 配置已为 `/api/` 关闭 `proxy_buffering` 和 gzip，`proxy_read_timeout` / `proxy_send_timeout` 设置为 3600 秒。`X-Accel-Buffering: no` 也会随响应发送。
 > - 将 ALB/任何中间代理的连接空闲超时设得大于心跳周期（建议至少 60 秒；本项目心跳间隔为 15 秒）。如还有 WAF、CDN 等代理，也要确认其支持并允许长时间流式响应，必要时提高其超时或将 SSE 路径排除缓冲。
 > - ALB 后端健康检查不要使用 `/api/events`（它不会结束响应），应使用 `/api/health`。长连接建立后会固定落在某个后端实例；扩缩容或发布时允许客户端自动重连，生产发布建议配置足够的优雅下线时间。
+> - SSE 客户端关闭标签页、断网或代理超时会产生 `Broken pipe` / `AsyncRequestNotUsableException`，这是长连接常见的断开方式。后端会停止该连接的推送任务并回收会话，不应在输出失败后再次 `completeWithError` 触发二次异步分发。
 > - 这是演示流：每条连接独立收到示例事件。生产环境的消息广播、用户鉴权、断线续传、跨实例共享状态和容量保护需按业务补充。
 
 ## API

@@ -1,11 +1,14 @@
 package com.example.sse;
 
 import jakarta.annotation.PreDestroy;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.io.IOException;
 import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -13,10 +16,12 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 @RestController
 public class SseController {
+    private static final Logger log = LoggerFactory.getLogger(SseController.class);
     private static final long EVENT_INTERVAL_SECONDS = 5;
     private static final long HEARTBEAT_INTERVAL_SECONDS = 15;
 
@@ -30,20 +35,14 @@ public class SseController {
     });
 
     @GetMapping(path = "/api/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter subscribe() {
+    public SseEmitter subscribe() throws IOException {
         // A zero timeout keeps the connection open until the client disconnects or the app shuts down.
         SseEmitter emitter = new SseEmitter(0L);
         long clientId = clientIds.incrementAndGet();
         StreamSession session = new StreamSession(emitter);
         sessions.put(clientId, session);
 
-        Runnable cleanup = () -> {
-            sessions.remove(clientId);
-            ScheduledFuture<?> task = session.task;
-            if (task != null) {
-                task.cancel(false);
-            }
-        };
+        Runnable cleanup = () -> stopSession(clientId, session);
         emitter.onCompletion(cleanup);
         emitter.onTimeout(cleanup);
         emitter.onError(error -> cleanup.run());
@@ -53,11 +52,15 @@ public class SseController {
                     .name("connected")
                     .id(Long.toString(eventIds.incrementAndGet()))
                     .data(Map.of("clientId", clientId, "message", "SSE connection established", "time", Instant.now().toString())));
-            session.task = scheduler.scheduleAtFixedRate(
+
+            ScheduledFuture<?> task = scheduler.scheduleAtFixedRate(
                     new StreamTask(clientId, session), EVENT_INTERVAL_SECONDS, 1, TimeUnit.SECONDS);
-        } catch (Exception exception) {
-            cleanup.run();
-            emitter.completeWithError(exception);
+            session.setTask(task);
+        } catch (IOException | RuntimeException exception) {
+            // Let MVC handle a synchronous setup failure. Completing an emitter with an error
+            // here can trigger another async dispatch after Tomcat has already entered ERROR.
+            stopSession(clientId, session);
+            throw exception;
         }
         return emitter;
     }
@@ -69,8 +72,18 @@ public class SseController {
 
     @PreDestroy
     public void shutdown() {
-        sessions.values().forEach(session -> session.emitter.complete());
+        sessions.forEach((clientId, session) -> {
+            stopSession(clientId, session);
+            session.emitter.complete();
+        });
         scheduler.shutdownNow();
+    }
+
+    private void stopSession(long clientId, StreamSession session) {
+        if (session.closed.compareAndSet(false, true)) {
+            sessions.remove(clientId, session);
+            session.cancelTask();
+        }
     }
 
     private final class StreamTask implements Runnable {
@@ -85,7 +98,7 @@ public class SseController {
 
         @Override
         public void run() {
-            if (!sessions.containsKey(clientId)) {
+            if (session.closed.get()) {
                 return;
             }
             try {
@@ -105,18 +118,55 @@ public class SseController {
                                     "time", Instant.now().toString())));
                 }
             } catch (Exception exception) {
-                sessions.remove(clientId);
-                session.emitter.completeWithError(exception);
+                // A closed browser/tab or a proxy timeout commonly surfaces as Broken pipe.
+                // The response is already unusable: remove the task, but don't call
+                // completeWithError(), which can cause a second async dispatch in Tomcat.
+                stopSession(clientId, session);
+                if (isClientDisconnect(exception)) {
+                    log.debug("SSE client {} disconnected", clientId);
+                } else {
+                    log.warn("Stopping SSE stream for client {} after send failure", clientId, exception);
+                }
             }
         }
     }
 
+    private static boolean isClientDisconnect(Throwable error) {
+        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+            String type = cause.getClass().getName();
+            String message = cause.getMessage();
+            if (cause instanceof IOException
+                    || type.endsWith("ClientAbortException")
+                    || type.endsWith("AsyncRequestNotUsableException")
+                    || (message != null && message.toLowerCase().contains("broken pipe"))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static final class StreamSession {
         private final SseEmitter emitter;
+        private final AtomicBoolean closed = new AtomicBoolean();
         private volatile ScheduledFuture<?> task;
 
         private StreamSession(SseEmitter emitter) {
             this.emitter = emitter;
+        }
+
+        private void setTask(ScheduledFuture<?> task) {
+            this.task = task;
+            // The request can disconnect while scheduleAtFixedRate is returning.
+            if (closed.get()) {
+                task.cancel(false);
+            }
+        }
+
+        private void cancelTask() {
+            ScheduledFuture<?> current = task;
+            if (current != null) {
+                current.cancel(false);
+            }
         }
     }
 }
