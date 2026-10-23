@@ -107,7 +107,7 @@ docker buildx build --platform linux/amd64 -t "$REGISTRY/$NAMESPACE/sse-frontend
 4. **配置 ALB**：创建或使用已有 ALB，在监听器中将业务端口（建议 HTTPS/443）转发至前端 SAE 应用的后端服务器组/内网入口，后端端口为 `80`。将指定域名（如 `sse.example.com`）解析到 ALB 地址，并在 ALB 监听器绑定域名对应的 TLS 证书；可另设 HTTP/80 重定向到 HTTPS/443。具体后端服务器组类型按当前地域和 SAE/ALB 控制台支持的 SAE 集成方式选择。
 5. **验证链路**：访问 `https://<指定域名>/` 确认页面加载；访问 `https://<指定域名>/styles.css` 应返回 CSS 内容且状态码为 200；访问 `https://<指定域名>/api/health` 确认返回 `status: UP`；在页面点击连接，或运行 `curl -N https://<指定域名>/api/events` 确认数据持续输出。
 
-如果页面显示为无样式的纯文本，先在浏览器开发者工具的 Network 面板检查 `styles.css`：确认请求状态是 200、响应是 CSS，而不是 404 或返回了 `index.html`。从仓库根目录以 `./frontend` 为构建上下文重新构建并推送前端镜像，使用新的镜像标签更新 SAE 应用，并清理/刷新浏览器缓存。本项目前端样式使用系统字体，不依赖 Google Fonts 等外部字体站点。
+如果页面显示为无样式的纯文本，先在浏览器开发者工具的 Network 面板勾选 **Disable cache** 并硬刷新：检查 `styles.css` 状态为 200、`Content-Type` 为 `text/css`，Response 中是 CSS 内容而不是 `index.html`。最新版本的页面源代码不应再请求 `fonts.googleapis.com`。从仓库根目录以 `./frontend` 为构建上下文重新构建并推送前端镜像，使用新的镜像标签更新 SAE 应用。本项目前端 HTML 和静态资源已设置为不缓存，避免滚动发布后继续使用旧版本。
 
 > **SSE/负载均衡注意事项**
 >
